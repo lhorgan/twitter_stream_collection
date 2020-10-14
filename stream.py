@@ -3,15 +3,19 @@ import json
 import time
 from datetime import datetime
 from threading import Thread
+import queue
+import random
 
 consumer_key = ""  # Add your API key here
 consumer_secret = ""  # Add your API secret key here
 records_per_file = 5000  # Replace this with the number of tweets you want to store per file
-file_path = "/file/path/"  # Replace with appropriate file path followed by / where you want to store the file
+file_path = "/home/luke/Documents/lazer/covidstream/"  # Replace with appropriate file path followed by / where you want to store the file
 
 count = 0
 file_object = None
 file_name = None
+dead_partitions = queue.Queue()
+kill = False
 
 
 def get_bearer_token(key, secret):
@@ -49,24 +53,45 @@ def save_data(item):
 
 
 def stream_connect(partition):
-    response = requests.get("https://api.twitter.com/labs/1/tweets/stream/covid19?partition={}".format(partition),
-                            headers={"User-Agent": "TwitterDevCovid19StreamQuickStartPython",
-                                     "Authorization": "Bearer {}".format(
-                                         get_bearer_token(consumer_key, consumer_secret))},
-                            stream=True)
-    for response_line in response.iter_lines():
-        if response_line:
-            save_data(json.loads(response_line))
+    global kill, dead_partitions
 
+    print("Creating stream for partition %i" % partition)
+
+    try:
+        response = requests.get("https://api.twitter.com/labs/1/tweets/stream/covid19?partition={}".format(partition),
+                                headers={"User-Agent": "TwitterDevCovid19StreamLazerLab",
+                                        "Authorization": "Bearer {}".format(
+                                            get_bearer_token(consumer_key, consumer_secret))},
+                                stream=True)
+        for response_line in response.iter_lines():
+            if random.random() < 0.01:
+                raise OSError(2, "Something went wrong in partition %i. This is totally not a drill." % partition, "simulated error")
+
+            if response_line:
+                save_data(json.loads(response_line))
+            if kill == True:
+                return # end this thread
+    except (requests.exceptions.ConnectionError, OSError) as e:
+        print(e)
+        print("Error in thread for parition %i" % partition)
+        dead_partitions.put(partition)
+        return # explicitly end this thread
 
 def main():
-    timeout = 0
-    while True:
-        for partition in range(1, 5):
-            Thread(target=stream_connect, args=(partition,)).start()
-        time.sleep(2 ** timeout * 1000)
-        timeout += 1
+    global kill, dead_partitions
 
+    timeout = 0
+    for partition in range(1, 5):
+        Thread(target=stream_connect, args=(partition,)).start()
+    
+    while not kill:
+        try:
+            partition = dead_partitions.get()
+            if partition is not None:
+                Thread(target=stream_connect, args=(partition,)).start()
+            time.sleep(1000)
+        except KeyboardInterrupt:
+            kill = True
 
 if __name__ == "__main__":
     main()
