@@ -11,7 +11,7 @@ import sys
 consumer_key = os.environ.get("twitter_consumer_key") 
 consumer_secret = os.environ.get("twitter_consumer_secret")
 records_per_file = 5000  # Replace this with the number of tweets you want to store per file
-file_path = sys.argv[1]
+file_path = sys.argv[1] # make sure to include a trailing /
 
 count = 0
 file_object = None
