@@ -6,11 +6,12 @@ from threading import Thread
 import queue
 import random
 import os
+import sys
 
 consumer_key = os.environ.get("twitter_consumer_key") 
 consumer_secret = os.environ.get("twitter_consumer_secret")
 records_per_file = 5000  # Replace this with the number of tweets you want to store per file
-file_path = "/home/luke/Documents/lazer/covidstream/"  # Replace with appropriate file path followed by / where you want to store the file
+file_path = sys.argv[1]
 
 count = 0
 file_object = None
@@ -26,7 +27,7 @@ def get_bearer_token(key, secret):
         data={'grant_type': 'client_credentials'},
         headers={"User-Agent": "TwitterDevCovid19StreamQuickStartPython"})
 
-    if response.status_code is not 200:
+    if response.status_code != 200:
         raise Exception(f"Cannot get a Bearer token (HTTP %d): %s" % (response.status_code, response.text))
 
     body = response.json()
