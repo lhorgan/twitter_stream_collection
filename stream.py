@@ -64,8 +64,8 @@ def stream_connect(partition):
                                             get_bearer_token(consumer_key, consumer_secret))},
                                 stream=True)
         for response_line in response.iter_lines():
-            if random.random() < 0.01:
-                raise OSError(2, "Something went wrong in partition %i. This is totally not a drill." % partition, "simulated error")
+            # if random.random() < 0.01:
+            #     raise OSError(2, "Something went wrong in partition %i. This is totally not a drill." % partition, "simulated error")
 
             if response_line:
                 save_data(json.loads(response_line))
