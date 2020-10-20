@@ -33,25 +33,26 @@ def get_bearer_token(key, secret):
     body = response.json()
     return body['access_token']
 
-
 # Helper method that saves the tweets to a file at the specified path
 def save_data(item):
-    global file_object, count, file_name
+    global file_object, file_name, current_day
+    
+    day = datetime.date(datetime.utcnow())
+    
     if file_object is None:
-        file_name = int(datetime.utcnow().timestamp() * 1e3)
-        count += 1
-        file_object = open(f'{file_path}covid19-{file_name}.csv', 'a')
-        file_object.write("{}\n".format(item))
+        current_day =  day
+        file_name = day.strftime("%m-%d-%Y")     
+        file_object = open(f'{file_path}covid19_{file_name}.csv', 'a')
+        file_object.write("{}\n".format(json.dumps(item)))
         return
-    if count == records_per_file:
-        file_object.close()
-        count = 1
-        file_name = int(datetime.utcnow().timestamp() * 1e3)
-        file_object = open(f'{file_path}covid19-{file_name}.csv', 'a')
-        file_object.write("{}\n".format(item))
-    else:
-        count += 1
-        file_object.write("{}\n".format(item))
+    if day != current_day:
+        current_day =  day
+        file_object.close()        
+        file_name = day.strftime("%m-%d-%Y")
+        file_object = open(f'{file_path}covid19_{file_name}.csv', 'a')
+        file_object.write("{}\n".format(json.dumps(item)))
+    else:        
+        file_object.write("{}\n".format(json.dumps(item)))
 
 
 def stream_connect(partition):
@@ -68,9 +69,13 @@ def stream_connect(partition):
         for response_line in response.iter_lines():
             # if random.random() < 0.01:
             #     raise OSError(2, "Something went wrong in partition %i. This is totally not a drill." % partition, "simulated error")
-
             if response_line:
-                save_data(json.loads(response_line))
+                data = json.loads(response_line)
+                try:
+                    if data['lang'] == 'en' :
+                        save_data(data)
+                except KeyError:
+                    continue
             if kill == True:
                 return # end this thread
     except (requests.exceptions.ConnectionError, OSError) as e:
