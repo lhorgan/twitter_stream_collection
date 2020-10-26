@@ -7,16 +7,22 @@ import queue
 import random
 import os
 import sys
+import logging
+import traceback
 
 consumer_key = os.environ.get("twitter_consumer_key") 
 consumer_secret = os.environ.get("twitter_consumer_secret")
 records_per_file = 5000  # Replace this with the number of tweets you want to store per file
 file_path = sys.argv[1] # make sure to include a trailing /
 
+print(consumer_key)
+print(consumer_secret)
+
 count = 0
 file_object = None
 file_name = None
 dead_partitions = queue.Queue()
+tweets_to_write = queue.Queue()
 kill = False
 
 
@@ -34,25 +40,37 @@ def get_bearer_token(key, secret):
     return body['access_token']
 
 # Helper method that saves the tweets to a file at the specified path
-def save_data(item):
-    global file_object, file_name, current_day
+def save_data():
+    global file_object, file_name, current_day, tweets_to_write, kill
+    time_to_sleep = 0.05
     
-    day = datetime.date(datetime.utcnow())
-    
+    current_day = datetime.date(datetime.utcnow())
+    day = current_day
     if file_object is None:
-        current_day =  day
         file_name = day.strftime("%m-%d-%Y")     
         file_object = open(f'{file_path}covid19_{file_name}.csv', 'a')
-        file_object.write("{}\n".format(json.dumps(item)))
-        return
-    if day != current_day:
-        current_day =  day
-        file_object.close()        
-        file_name = day.strftime("%m-%d-%Y")
-        file_object = open(f'{file_path}covid19_{file_name}.csv', 'a')
-        file_object.write("{}\n".format(json.dumps(item)))
-    else:        
-        file_object.write("{}\n".format(json.dumps(item)))
+
+    while not kill:
+        day = datetime.date(datetime.utcnow())
+        if day != current_day:
+            print("It's a new day!")
+            current_day =  day
+            file_object.close()
+            file_name = day.strftime("%m-%d-%Y")
+            file_object = open(f'{file_path}covid19_{file_name}.csv', 'a')
+        
+        item = tweets_to_write.get()
+        if item is not None:
+            file_object.write("{}\n".format(json.dumps(item)))
+        
+        qsize = tweets_to_write.qsize()
+        if tweets_to_write.qsize() > 2:
+            time_to_sleep -= 0.001
+        else:
+            time_to_sleep += 0.001
+        
+        #print("Sleeping for %0.5f, queue size is %i" % (time_to_sleep, qsize))
+        time.sleep(time_to_sleep)
 
 
 def stream_connect(partition):
@@ -73,7 +91,7 @@ def stream_connect(partition):
                 data = json.loads(response_line)
                 try:
                     if data['lang'] == 'en' :
-                        save_data(data)
+                        tweets_to_write.put(data)
                 except KeyError:
                     continue
             if kill == True:
@@ -83,6 +101,13 @@ def stream_connect(partition):
         print("Error in thread for parition %i" % partition)
         dead_partitions.put(partition)
         return # explicitly end this thread
+    except Exception as e:
+        print(e)
+        print("Unexpected error in thread for parition %i" % partition)
+        logging.error(traceback.format_exc())
+        # Logs the error appropriately. 
+        dead_partitions.put(partition)
+        return
 
 def main():
     global kill, dead_partitions
@@ -90,6 +115,8 @@ def main():
     timeout = 0
     for partition in range(1, 5):
         Thread(target=stream_connect, args=(partition,)).start()
+    
+    Thread(target=save_data, args=()).start()
     
     while not kill:
         try:
