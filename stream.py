@@ -42,7 +42,7 @@ def get_bearer_token(key, secret):
 # Helper method that saves the tweets to a file at the specified path
 def save_data():
     global file_object, file_name, current_day, tweets_to_write, kill
-    time_to_sleep = 0.05
+    time_to_sleep = 0.1
     
     current_day = datetime.date(datetime.utcnow())
     day = current_day
@@ -65,9 +65,10 @@ def save_data():
         
         qsize = tweets_to_write.qsize()
         if tweets_to_write.qsize() > 2:
-            time_to_sleep -= 0.001
+            #time_to_sleep -= 0.001
+            time_to_sleep *= 0.8
         else:
-            time_to_sleep += 0.001
+            time_to_sleep /= 0.8
         
         #print("Sleeping for %0.5f, queue size is %i" % (time_to_sleep, qsize))
         time.sleep(time_to_sleep)
